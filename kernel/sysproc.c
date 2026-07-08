@@ -6,6 +6,7 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "vm.h"
+#include "pinfo.h"
 
 uint64
 sys_exit(void)
@@ -114,28 +115,40 @@ sys_getpinfo(void)
   uint64 upinfo;
   struct pinfo opinfo;
   struct proc *p;
-  
+  // counter to the element we are processing
+  int i = 0;
+
   argaddr(0, &upinfo);
   if (upinfo == 0)
     return -1;
-    
+
   extern struct proc proc[];
-  
+
   for (p = proc; p < &proc[NPROC]; p++) {
+    // lock the process
     acquire(&p->lock);
-    
-    if (p->state != UNUSED) {
-      opinfo.pid = p->pid;
-      opinfo.state = p->state;
-      opinfo.priority = 20;
-      opinfo.tickets = 10;
-      
-      if (copyout(myproc()->pagetable, upinfo + i * sizeof(struct pinfo), (char *)&kpinfo, sizeof(struct pinfo)) < 0) {
+
+    opinfo.pid = p->pid;
+    opinfo.state = p->state;
+    opinfo.priority = 20; // temp priority - will edit in further phases of the project
+    opinfo.tickets = 10; // temp tickets - will edit in further phases of the project
+
+    // if a process is unused, set id to 0
+    if (p->state == UNUSED)
+      opinfo.pid = 0;
+
+    // copying the kernel results in the user space (checking if it fails)
+    // first parameter -> pointing to the pagetable of the process
+    // second parameter -> pointing to which element of the array we are currently processing
+    // third parameter -> address of the data we are copying
+    // forth parameter -> number of bytes we have to copy
+    if (copyout(myproc()->pagetable, upinfo + i * sizeof(struct pinfo), (char *)&opinfo, sizeof(struct pinfo)) < 0) {
         release(&p->lock);
         return -1;
       }
-    }
+    // unlock the process
     release(&p->lock);
+    i++;
   }
 
   return 0;
