@@ -107,3 +107,36 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+uint64
+sys_getpinfo(void)
+{
+  uint64 upinfo;
+  struct pinfo opinfo;
+  struct proc *p;
+  
+  argaddr(0, &upinfo);
+  if (upinfo == 0)
+    return -1;
+    
+  extern struct proc proc[];
+  
+  for (p = proc; p < &proc[NPROC]; p++) {
+    acquire(&p->lock);
+    
+    if (p->state != UNUSED) {
+      opinfo.pid = p->pid;
+      opinfo.state = p->state;
+      opinfo.priority = 20;
+      opinfo.tickets = 10;
+      
+      if (copyout(myproc()->pagetable, upinfo + i * sizeof(struct pinfo), (char *)&kpinfo, sizeof(struct pinfo)) < 0) {
+        release(&p->lock);
+        return -1;
+      }
+    }
+    release(&p->lock);
+  }
+
+  return 0;
+}
