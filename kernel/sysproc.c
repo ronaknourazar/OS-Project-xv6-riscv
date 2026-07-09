@@ -130,7 +130,7 @@ sys_getpinfo(void)
 
     opinfo.pid = p->pid;
     opinfo.state = p->state;
-    opinfo.priority = 20; // temp priority - will edit in further phases of the project
+    opinfo.priority = p->priority; 
     opinfo.tickets = 10; // temp tickets - will edit in further phases of the project
 
     // if a process is unused, set id to 0
@@ -152,4 +152,33 @@ sys_getpinfo(void)
   }
 
   return 0;
+}
+
+uint64
+sys_setpriority(void) {
+  int pid;
+  int priority;
+  
+  argint(0, &pid);
+  argint(1, &priority);
+  
+  if (priority < 0 || priority > 100)
+    return -1;
+    
+  struct proc *p;
+  extern struct proc proc[];
+  
+  // search for the process with the same ID as input from user
+  // then set its priority
+  for (p = proc; p < &proc[NPROC]; p++) {
+    acquire(&p->lock);
+    if (p->pid == pid) {
+      p->priority = priority;
+      release(&p->lock);
+      return 0;
+    }
+    release(&p->lock);
+  }
+  // system call was unsuccessful
+  return -1;
 }
