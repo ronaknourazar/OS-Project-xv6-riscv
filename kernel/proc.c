@@ -125,7 +125,7 @@ found:
   p->pid = allocpid();
   p->state = USED;
   p->priority = 50; // initial priority
-
+  p->tickets = 1; // initial number of tickets allocated
   // Allocate a trapframe page.
   if ((p->trapframe = (struct trapframe *)kalloc()) == 0) {
     freeproc(p);
@@ -276,6 +276,7 @@ kfork(void)
     return -1;
   }
   np->sz = p->sz;
+  np->tickets = p->tickets;
 
   // copy saved user registers.
   *(np->trapframe) = *(p->trapframe);
@@ -415,6 +416,28 @@ kwait(uint64 addr)
   }
 }
 
+
+int
+random_number_generator(int max) {
+  if (max <= 0) return 1;
+  static unsigned int seed = 123456789;
+  
+  unsigned long a = 1103515245;
+  unsigned long c = 12345;
+  unsigned long m = 2147483648; // 31^2
+  
+  // locking system ticks to prevent race condition
+  acquire(&tickslock);
+  seed += ticks;
+  release(&tickslock);
+  
+  // LCG: X_{n+1} = (X_{n} * a + c) % m
+  seed = (seed * a + c) % m;
+  
+  // Random number range = [1, max]
+  return (seed % max) + 1;
+}
+
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
 // Scheduler never returns.  It loops, doing:
@@ -437,14 +460,14 @@ scheduler(void)
     // and wfi.
     intr_on();
     intr_off();
-    
+
 #ifdef SCHEDULER_PRIORITY
     struct proc *best_proc = 0;
     int best_idx = -1; // index of the chosen process
     static int last_idx = -1; // index of the last process in RR
-    
+
     int best_priority = 101;
-    
+
     // finding the best priority
     for(p = proc; p < &proc[NPROC]; p++) {
       acquire(&p->lock);
@@ -455,21 +478,21 @@ scheduler(void)
       }
       release(&p->lock);
     }
-    
+
     for(int i = 0; i < NPROC; i++) {
       int idx = (last_idx + 1 + i) % NPROC; // circular RR indexing
       p = &proc[idx];
-      
+
       acquire(&p->lock);
       // if two processes have the same priority, switch between them
       if(p->state == RUNNABLE && p->priority == best_priority) {
         best_proc = p;
         best_idx = idx;
-        break; 
+        break;
       }
       release(&p->lock);
     }
-    
+
     if (best_proc) {
       // Switch to chosen process.  It is the process's job
       // to release its lock and then reacquire it
@@ -477,9 +500,9 @@ scheduler(void)
       best_proc->state = RUNNING;
       c->proc = best_proc;
       last_idx = best_idx; // update RR index
-      
+
       swtch(&c->context, &best_proc->context);
-      
+
       // Process is done running for now.
       // It should have changed its p->state before coming back.
       c->proc = 0;
@@ -489,7 +512,48 @@ scheduler(void)
       // nothing to run; stop running on this core until an interrupt.
       asm volatile("wfi");
     }
-    
+#elif defined(SCHEDULER_LOTTERY)
+  int total_tickets = 0;
+
+  // get the total number of tickets
+  for (p = proc; p < &proc[NPROC]; p++) {
+    acquire(&p->lock);
+    if (p->state == RUNNABLE) {
+      total_tickets += p->tickets;
+    }
+    release(&p->lock);
+  }
+
+  if (total_tickets > 0) {
+    // generate the winner
+    int winner = random_number_generator(total_tickets);
+    int ticket_cnt = 0;
+
+    for(p = proc; p < &proc[NPROC]; p++) {
+        acquire(&p->lock);
+        if(p->state == RUNNABLE) {
+          // accumulate tickets until we reach a process with that many tickets 
+          ticket_cnt += p->tickets;
+          // if the condition is true, we have found the process with the assigned ticket
+          if(ticket_cnt >= winner) {
+            p->state = RUNNING;
+            c->proc = p;
+            swtch(&c->context, &p->context);
+
+            c->proc = 0;
+            release(&p->lock);
+            break;
+          }
+        }
+        release(&p->lock);
+      }
+    }
+    else {
+      // nothing to run; stop running on this core until an interrupt.
+      asm volatile("wfi");
+    }
+  }
+
 #else
     int found = 0;
     for (p = proc; p < &proc[NPROC]; p++) {
@@ -514,7 +578,6 @@ scheduler(void)
       asm volatile("wfi");
     }
 #endif
-}
 }
 
 // Switch to scheduler.  Must hold only p->lock
@@ -745,3 +808,4 @@ procdump(void)
     printk("\n");
   }
 }
+
