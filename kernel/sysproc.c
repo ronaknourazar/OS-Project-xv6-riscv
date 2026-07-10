@@ -158,16 +158,16 @@ uint64
 sys_setpriority(void) {
   int pid;
   int priority;
-  
+
   argint(0, &pid);
   argint(1, &priority);
-  
+
   if (priority < 0 || priority > 100)
     return -1;
-    
+
   struct proc *p;
   extern struct proc proc[];
-  
+
   // search for the process with the same ID as input from user
   // then set its priority
   for (p = proc; p < &proc[NPROC]; p++) {
@@ -181,4 +181,24 @@ sys_setpriority(void) {
   }
   // system call was unsuccessful
   return -1;
+}
+
+uint64
+sys_settickets(void) {
+  int tickets;
+
+  argint(0, &tickets);
+
+  if (tickets < 0)
+    return -1;
+
+  // get current process
+  struct proc *p = myproc();
+  // lock process, set new ticket number, release process
+  acquire(&p->lock);
+  p->tickets = tickets;
+  release(&p->lock);
+
+  return 0;
+
 }
