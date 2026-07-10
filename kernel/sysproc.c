@@ -131,7 +131,7 @@ sys_getpinfo(void)
     opinfo.pid = p->pid;
     opinfo.state = p->state;
     opinfo.priority = p->priority; 
-    opinfo.tickets = 10; // temp tickets - will edit in further phases of the project
+    opinfo.tickets = p->tickets;
 
     // if a process is unused, set id to 0
     if (p->state == UNUSED)
