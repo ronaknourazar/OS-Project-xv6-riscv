@@ -2,96 +2,131 @@
 #include "kernel/stat.h"
 #include "user/user.h"
 
-// تابعی برای ایجاد بار محاسباتی سنگین جهت درگیر کردن پردازنده
-void do_heavy_work(int loops) {
-  volatile int count = 0;
-  for (int i = 0; i < loops; i++) {
-    count++;
-  }
+#define WORK_SMALL  80000000
+#define WORK_MEDIUM 200000000
+#define WORK_LARGE 500000000
+
+void do_heavy_work(int loops)
+{
+    volatile int x = 0;
+    for (int i = 0; i < loops; i++)
+        x++;
 }
 
-int main(int argc, char *argv[]) {
-  printf("==================================================\n");
-  printf("--- STARTING LOTTERY SCHEDULING TEST ---\n");
-  printf("==================================================\n\n");
+void run_group(int tickets[], int n, int work)
+{
+    printf("--------------------------------------------\n");
+    printf("Launching %d processes\n", n);
 
-  printf("[Scenario 1] 2 processes with EQUAL tickets (30 each)\n");
-  
-  for (int i = 0; i < 2; i++) {
-    int pid = fork();
-    if (pid == 0) {
-      int my_pid = getpid();
-      settickets(30);
-      printf("-> Child %d (Group Equal) started with 30 tickets...\n", my_pid);
-      do_heavy_work(80000000);
-      printf(">>> [Equal Group] Child %d (30 Tickets) FINISHED!\n", my_pid);
-      exit(0);
+    for (int i = 0; i < n; i++)
+    {
+        int pid = fork();
+
+        if (pid == 0)
+        {
+            printf("[START] PID %d | Tickets = %d\n",
+                   getpid(), tickets[i]);
+
+            do_heavy_work(work);
+
+            printf("[DONE ] PID %d | Tickets = %d\n",
+                   getpid(), tickets[i]);
+
+            exit(0);
+        }
+        settickets(tickets[i]);
     }
-  }
-  
-  wait(0);
-  wait(0);
-  printf("--------------------------------------------------\n");
 
-  printf("\n[Scenario 2] processes with Ticket Differences\n");
+    for (int i = 0; i < n; i++)
+        wait(0);
 
-  if (fork() == 0) {
-    int my_pid = getpid();
-    settickets(5);
-    printf("-> Child %d (Extreme Low) started with 5 tickets...\n", my_pid);
-    do_heavy_work(60000000);
-    printf(">>> [Extreme Low] Child %d (5 Tickets) FINISHED!\n", my_pid);
+    printf("Group completed.\n\n");
+}
+
+int
+main(int argc, char *argv[])
+{
+    printf("\n=============================================\n");
+    printf("        LOTTERY SCHEDULER TEST SUITE\n");
+    printf("=============================================\n\n");
+
+    printf("TEST 1 : Equal Tickets Fairness\n");
+
+    int samples_1[] = {
+        50,50,50,50,50,50
+    };
+
+    run_group(samples_1, 6, WORK_SMALL);
+
+    printf("TEST 2 : Increasing Tickets\n");
+
+    int samples_2[] = {
+        10,20,30,40,50,60,70,80
+    };
+
+    run_group(samples_2, 8, WORK_MEDIUM);
+
+    printf("TEST 3 : Extreme Difference\n");
+
+    int samples_3[] = {
+        1,
+        5,
+        10,
+        50,
+        100,
+        250,
+        500
+    };
+
+    run_group(samples_3, 7, WORK_MEDIUM);
+
+    printf("TEST 4 : Random Distribution\n");
+
+    int samples_4[] = {
+        77,
+        15,
+        200,
+        31,
+        94,
+        8,
+        150,
+        61,
+        300,
+        12
+    };
+
+    run_group(samples_4, 10, WORK_MEDIUM);
+
+    printf("TEST 5 : High Contention (16 Processes)\n");
+
+    int samples_5[] = {
+        5,10,15,20,
+        25,30,35,40,
+        45,50,55,60,
+        65,70,75,80
+    };
+
+    run_group(samples_5, 16, WORK_LARGE);
+
+    printf("TEST 6 : Repeated Probability Test\n");
+
+    for (int round = 1; round <= 2; round++)
+    {
+        printf("\nRound %d\n", round);
+
+        int t[] = {
+            10,
+            20,
+            40,
+            80
+        };
+
+        run_group(t, 4, WORK_SMALL);
+    }
+
+    printf("\n=============================================\n");
+    printf("        ALL TESTS COMPLETED\n");
+    printf("=============================================\n");
+
     exit(0);
-  }
-
-  if (fork() == 0) {
-    int my_pid = getpid();
-    settickets(200);
-    printf("-> Child %d (Extreme High) started with 200 tickets...\n", my_pid);
-    do_heavy_work(60000000);
-    printf(">>> [Extreme High] Child %d (200 Tickets) FINISHED!\n", my_pid);
-    exit(0);
-  }
-
-  wait(0);
-  wait(0);
-  printf("--------------------------------------------------\n");
-
-  printf("\n[Scenario 3] Mixed Distribution (150 vs 75 vs 15 tickets)\n");
-  printf("Expected Finish Order: First 150, then 75, and lastly 15.\n");
-
-  
-  if (fork() == 0) {
-    settickets(75);
-    printf("-> Child %d started with 75 tickets\n", getpid());
-    do_heavy_work(2500000000);
-    printf(">>> [Mixed 75] Child FINISHED!\n");
-    exit(0);
-  }
-
-  if (fork() == 0) {
-    settickets(150);
-    printf("-> Child %d started with 150 tickets\n", getpid());
-    do_heavy_work(2500000000);
-    printf(">>> [Mixed 150] Child FINISHED!\n");
-    exit(0);
-  }
-
-  if (fork() == 0) {
-    settickets(15);
-    printf("-> Child %d started with 15 tickets\n", getpid());
-    do_heavy_work(2500000000);
-    printf(">>> [Mixed 15] Child FINISHED!\n");
-    exit(0);
-  }
-
-  wait(0);
-  wait(0);
-  wait(0);
-
-  printf("\n==================================================\n");
-  printf("--- LOTTERY SCENARIOS COMPLETED SUCCESSFULLY ---\n");
-  printf("==================================================\n");
-  
-  exit(0);
 }
