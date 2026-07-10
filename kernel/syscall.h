@@ -23,3 +23,4 @@
 #define SYS_sync   22
 #define SYS_getpinfo 23 // for the first phase of the project
 #define SYS_setpriority 24 // for the second phase of the project
+#define SYS_settickets 25 // for the third phase of the project
