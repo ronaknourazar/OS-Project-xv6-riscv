@@ -153,6 +153,7 @@ UPROGS=\
 	$U/_ps\
 	$U/_chpri\
 	$U/_priority_tst\
+	$U/_lottery_tst\
 
 fs.img: mkfs/mkfs README $(UPROGS)
 	mkfs/mkfs fs.img README $(UPROGS)
